@@ -22,15 +22,15 @@ Deal 1:
 """
 
 example = """
-Deal 1:
-  Cascade 1: JS 10H 9S KD 5D AD 5C
-  Cascade 2: 10C 6C 9D AH 6S QD 10S
-  Cascade 3: QH 4H 2S 9H AC 3S JH
-  Cascade 4: 10D KS AS JC 2H 5H 9C
-  Cascade 5: 3C 5S KC 8H 4S 3H
-  Cascade 6: KH 3D QS 4C 2C 6H
-  Cascade 7: 7D JD 7H 6D 7S 8C
-  Cascade 8: QC 8S 8D 2D 7C 4D
+Deal 4:
+  Cascade 1: QH 4S JC 10S QC 10H 8S
+  Cascade 2: 10D 5S 3C 3S 5D 9S 7C
+  Cascade 3: AS 8C 7H 8D JD 2C 7D
+  Cascade 4: 9D AD 2H AH 9H 5C 3D
+  Cascade 5: 4D JH 7S AC 8H 6C
+  Cascade 6: KS KH 6S 6H 2D 10C
+  Cascade 7: 3H 2S 4H 9C 4C 5H
+  Cascade 8: QS KC QD JS 6D KD
 
 """
 
@@ -69,34 +69,32 @@ class State:
 
         return s
 
-    def apply_move(self, move):
-        # 深拷贝当前状态
-        new_state = copy.deepcopy(self)
+# HSD.py - 在 State 类中修改 apply_move 方法
 
-        # 获取源位置的卡牌
+    def apply_move(self, move):
+        # 避免 deepcopy，手动创建新状态
+        # 1. 创建一个新的、空的 State 对象
+        new_state = State([c.copy() for c in self.cascades]) # 浅拷贝列表
+        new_state.freecells = self.freecells.copy() # 浅拷贝列表
+        new_state.foundations = {suit: found.copy() for suit, found in self.foundations.items()} # 浅拷贝
+
+        # 2. 获取源卡牌并更新源位置 (和原代码相同)
         if move.source_type == 'cascade':
-            card = new_state.cascades[move.source_idx][-1]
-            del new_state.cascades[move.source_idx][-1]
+            card = new_state.cascades[move.source_idx].pop() # pop() 直接修改了新状态的列表
         elif move.source_type == 'freecell':
             card = new_state.freecells[move.source_idx]
             new_state.freecells[move.source_idx] = None
-        else:
+        else: # Should not happen with get_legal_moves
             raise ValueError(f"Unsupported source: {move.source_type}")
 
-        # 放置到目标位置
+        # 3. 放置卡牌到目标位置 (和原代码相同)
         if move.dest_type == 'cascade':
             new_state.cascades[move.dest_idx].append(card)
         elif move.dest_type == 'freecell':
-            if new_state.freecells[move.dest_idx] is not None:
-                raise ValueError("Target freecell not empty")
             new_state.freecells[move.dest_idx] = card
         elif move.dest_type == 'foundation':
-            suit = card.suit
-            expected_rank = len(new_state.foundations[suit]) + 1
-            if card.rank != expected_rank:
-                raise ValueError(f"Invalid foundation move: expected rank {expected_rank}, got {card.rank}")
-            new_state.foundations[suit].append(card)
-        else:
+            new_state.foundations[card.suit].append(card)
+        else: # Should not happen with get_legal_moves
             raise ValueError(f"Unsupported destination: {move.dest_type}")
 
         return new_state
@@ -291,7 +289,7 @@ def combined_heuristic(state):
     h3 = 52 - sum(len(pile) for pile in state.foundations.values())  # 剩余未进foundation的牌数
     return h1 + 1000 * h2 + 10 * h3
 
-def hsd_solver(initial_state, k, N, timeout=600, progress_hook=None):
+def hsd_solver(initial_state, k, N, timeout=600):
     import itertools
     import time
     MAX_OPEN_LIST_SIZE = 10000
@@ -347,9 +345,6 @@ def hsd_solver(initial_state, k, N, timeout=600, progress_hook=None):
         for _, _, state in open_list:
             if is_goal(state):
                 return state
-
-        if progress_hook is not None:
-            progress_hook(h_val, iterations)
 
     return None
 

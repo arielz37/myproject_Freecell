@@ -2,10 +2,14 @@ import os
 import time
 import matplotlib.pyplot as plt
 import traceback
-from HSD import State, hsd_solver, combined_heuristic, dfs_k_steps, is_goal, state_hash
+from HSD_3 import State, hsd_solver
+
+# PARAMETER
+## 测试的deal数量
+TEST_DEAL_NUM = 50
 
 # 读取TestDeals_freecell_32k前10个deal
-with open('TestDeals_freecell_32k', 'r') as f:
+with open('freecell_32k_deals.txt', 'r') as f:
     lines = f.readlines()
 
 deals = []
@@ -19,7 +23,7 @@ for line in lines:
 if deal:
     deals.append(''.join(deal))
 
-deals = deals[:10]
+deals = deals[:TEST_DEAL_NUM]
 print(f"共{len(deals)}个deal")
 
 # 结果保存目录
@@ -48,61 +52,17 @@ for idx, deal_text in enumerate(deals):
     heuristics = []
     start = time.time()
     timeout_flag = False
-    
-    def progress_hook(h_val):
-        heuristics.append(h_val)
 
-    # 包装hsd_solver，记录每轮最优heuristic value
-    def hsd_solver_with_hook(state, k, N, timeout=600):
-        import itertools
-        import heapq
-        MAX_OPEN_LIST_SIZE = 10000
-        transposition_table = {}
-        open_list = []
-        counter = itertools.count()
-        heapq.heappush(open_list, (combined_heuristic(state), next(counter), state))
-        iterations = 0
-        start_time = time.time()
-        best_h_val = float('inf')
-        while open_list:
-            if time.time() - start_time > timeout:
-                print(f"Deal {idx+1} 超时退出")
-                raise TimeoutError(f"Timeout >{timeout}s")
-            h_val, _, current_state = heapq.heappop(open_list)
-            iterations += 1
-            if h_val < best_h_val:
-                best_h_val = h_val
-                progress_hook(best_h_val)
-            if iterations % 100 == 0:
-                print(f"Deal {idx+1} 迭代{iterations}，当前最优启发式值：{best_h_val}")
-            new_states, found_goal, goal_state = dfs_k_steps(current_state, 6, transposition_table)
-            if found_goal:
-                print(f"Deal {idx+1} 找到goal，迭代{iterations}")
-                return goal_state, iterations
-            for s in new_states:
-                if is_goal(s):
-                    print(f"Deal {idx+1} 找到goal，迭代{iterations}")
-                    return s, iterations
-                h_val = combined_heuristic(s)
-                h = state_hash(s)
-                if h not in transposition_table:
-                    transposition_table[h] = True
-                    heapq.heappush(open_list, (h_val, next(counter), s))
-                    if len(transposition_table) >= 100000:
-                        transposition_table.clear()
-            if len(open_list) > MAX_OPEN_LIST_SIZE:
-                open_list = heapq.nsmallest(MAX_OPEN_LIST_SIZE, open_list)
-                heapq.heapify(open_list)
-        print(f"Deal {idx+1} open_list为空，未找到解")
-        return None, iterations
+    def progress_hook(h_val, iteration):
+        heuristics.append(h_val)
 
     try:
         print(f"开始求解Deal {idx+1}")
-        result, iters = hsd_solver_with_hook(state, k=6, N=100000, timeout=600)
+        result = hsd_solver(state, k=6, N=100000, timeout=600, progress_hook=progress_hook)
         elapsed = time.time() - start
         all_heuristics.append(heuristics)
         all_times.append(elapsed)
-        all_iters.append(iters)
+        all_iters.append(len(heuristics))
         # 画启发式变化图
         plt.figure()
         plt.plot(heuristics)
@@ -111,7 +71,7 @@ for idx, deal_text in enumerate(deals):
         plt.title(f'Deal {idx+1} Heuristic Progress')
         plt.savefig(f'results/deal_{idx+1}_heuristic.png')
         plt.close()
-        print(f"Deal {idx+1} finished in {elapsed:.2f}s, {iters} iterations.")
+        print(f"Deal {idx+1} finished in {elapsed:.2f}s, {len(heuristics)} iterations.")
     except Exception as e:
         print(f"Deal {idx+1} error or timeout!")
         traceback.print_exc()
@@ -121,9 +81,9 @@ for idx, deal_text in enumerate(deals):
         all_iters.append(len(heuristics))
 
 # 画总用时和轮数柱状图
-if all_times and all_iters and len(all_times) == 10 and len(all_iters) == 10:
+if all_times and all_iters and len(all_times) == TEST_DEAL_NUM and len(all_iters) == TEST_DEAL_NUM:
     plt.figure(figsize=(10,5))
-    plt.bar(range(1,11), all_times)
+    plt.bar(range(1,TEST_DEAL_NUM+1), all_times)
     plt.xlabel('Deal Number')
     plt.ylabel('Time Used (s)')
     plt.title('Time Used for Each Deal')
@@ -131,7 +91,7 @@ if all_times and all_iters and len(all_times) == 10 and len(all_iters) == 10:
     plt.close()
 
     plt.figure(figsize=(10,5))
-    plt.bar(range(1,11), all_iters)
+    plt.bar(range(1,TEST_DEAL_NUM+1), all_iters)
     plt.xlabel('Deal Number')
     plt.ylabel('Iteration Rounds')
     plt.title('Iteration Rounds for Each Deal')

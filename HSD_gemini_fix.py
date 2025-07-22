@@ -22,15 +22,15 @@ Deal 1:
 """
 
 example = """
-Deal 1:
-  Cascade 1: JS 10H 9S KD 5D AD 5C
-  Cascade 2: 10C 6C 9D AH 6S QD 10S
-  Cascade 3: QH 4H 2S 9H AC 3S JH
-  Cascade 4: 10D KS AS JC 2H 5H 9C
-  Cascade 5: 3C 5S KC 8H 4S 3H
-  Cascade 6: KH 3D QS 4C 2C 6H
-  Cascade 7: 7D JD 7H 6D 7S 8C
-  Cascade 8: QC 8S 8D 2D 7C 4D
+Deal 3:
+  Cascade 1: AD JH QD 9S KD AC 9C
+  Cascade 2: 3H JC 6H 5S JS 8S 9H
+  Cascade 3: 4C 7H 2C 3S AS 5C QH
+  Cascade 4: 7D 7C 6D 2H KC QS 3D
+  Cascade 5: 4H QC 6C 4S 2D 2S
+  Cascade 6: AH 5D 3C 8D 10H 5H
+  Cascade 7: KS 8H 9D 8C 4D KH
+  Cascade 8: 10D 10S 6S 10C 7S JD
 
 """
 
@@ -257,33 +257,40 @@ def state_hash(state: State):
 
 
 
-def dfs_k_steps(state: State, k: int, trans_table: dict):
-    stack = [(state, 0)]
-    new_states = []
-    local_trans_table = {} 
+def dfs_k_steps(state: State, k: int, initial_g: int, global_trans_table: dict):
+    # global_trans_table 是 hsd_solver 的主转置表，只读不写。
+    
+    # stack: (state, current_g, path_hashes)
+    stack = [(state, initial_g, [state_hash(state)])]
+    
+    # new_end_states: list of (state, final_g)
+    new_end_states = []
+    
+    local_visited_hashes = {state_hash(state)}
 
     while stack:
-        current_state, depth = stack.pop()
-
-        h = state_hash(current_state)
-        if h in local_trans_table:  
-            continue
-        local_trans_table[h] = True  
-
+        current_state, current_g, path_hashes = stack.pop()
+        
+        # NOTE: is_goal check in DFS is tricky with g(n), we'll rely on main loop
         if is_goal(current_state):
-            return [], True, current_state
+             return [], True, current_state
 
+        depth = current_g - initial_g
         if depth == k:
-            new_states.append(current_state)
+            new_end_states.append((current_state, current_g))
             continue
 
         legal_moves = get_legal_moves(current_state)
         for move in legal_moves:
             next_state = current_state.apply_move(move)
-            stack.append((next_state, depth + 1))
+            h_next = state_hash(next_state)
 
-    print(f"[DEBUG] DFS new_states: {len(new_states)}")
-    return new_states, False, None
+            if h_next not in global_trans_table and h_next not in local_visited_hashes:
+                local_visited_hashes.add(h_next)
+                stack.append((next_state, current_g + 1, path_hashes + [h_next]))
+
+    print(f"[DEBUG] DFS new_states: {len(new_end_states)}")
+    return new_end_states, False, None
 
 def combined_heuristic(state):
     h1 = heuristic_hsdh(state)
@@ -294,62 +301,78 @@ def combined_heuristic(state):
 def hsd_solver(initial_state, k, N, timeout=600, progress_hook=None):
     import itertools
     import time
-    MAX_OPEN_LIST_SIZE = 10000
+    MAX_OPEN_LIST_SIZE = 10000  
+    
+    # transposition_table: hash -> best_g_so_far
     transposition_table = {}
+    
+    # open_list: (f_val, tie_breaker, g_val, state)
     open_list = []
-    counter = itertools.count()  # 自增计数器
-    heapq.heappush(open_list, (combined_heuristic(initial_state), next(counter), initial_state))
+    counter = itertools.count()
+    
+    # --- Initial State Handling ---
+    initial_g = 0
+    initial_h = combined_heuristic(initial_state)
+    initial_f = initial_g + initial_h
+    initial_hash = state_hash(initial_state)
+    
+    heapq.heappush(open_list, (initial_f, next(counter), initial_g, initial_state))
+    transposition_table[initial_hash] = initial_g
+
     iterations = 0
-    best_h_val = float('inf')
     start_time = time.time()
 
     while open_list:
-        # 超时检测
         if time.time() - start_time > timeout:
             raise TimeoutError(f"搜索超时（>{timeout}秒），未找到解。")
 
-        h_val, _, current_state = heapq.heappop(open_list)
+        f_val, _, g_val, current_state = heapq.heappop(open_list)
+
+        # A* check: if we found a shorter path to an already popped state, ignore this one
+        current_hash = state_hash(current_state)
+        if g_val > transposition_table.get(current_hash, float('inf')):
+             continue
+
+        print(f"[DEBUG] Popped f={f_val} (g={g_val}, h={f_val - g_val})")
+        if iterations % 10 == 0:
+            print(f"[DEBUG] Iterations: {iterations}, Open list size: {len(open_list)}, Transposition table size: {len(transposition_table)}")
         iterations += 1
         
-        print(f"[DEBUG] Heuristic value = {h_val}")
-
-        if iterations % 1 == 0:
-            print(f"[DEBUG] Iterations: {iterations}, Open list size: {len(open_list)}, Transposition table size: {len(transposition_table)}")
-
-        new_states, found_goal, goal_state = dfs_k_steps(current_state, k, transposition_table)
+        # --- DFS Step ---
+        # Pass the current g_val
+        new_states_with_g, found_goal, goal_state = dfs_k_steps(current_state, k, g_val, transposition_table)
         
         if found_goal:
             return goal_state
 
-        for s in new_states:
+        for s, new_g in new_states_with_g:
             if is_goal(s):
                 return s
-            h_val = combined_heuristic(s)
-            h = state_hash(s)
-            if h not in transposition_table:
-                transposition_table[h] = True
-                heapq.heappush(open_list, (h_val, next(counter), s))
-                if len(transposition_table) >= N:
-                    print(f"[DEBUG] Transposition table reached limit {N}, clearing it")
-                    transposition_table.clear()
+            
+            s_hash = state_hash(s)
 
-            if h_val == 0:
-                print("启发式为0的状态：")
-                print(current_state)
-                print("is_goal:", is_goal(current_state))
+            # A* Core Logic
+            if new_g < transposition_table.get(s_hash, float('inf')):
+                transposition_table[s_hash] = new_g
+                h_s = combined_heuristic(s)
+                f_s = new_g + h_s
+                heapq.heappush(open_list, (f_s, next(counter), new_g, s))
+        
+        # 清空逻辑可以恢复，但仍然有风险。如果内存允许，建议注释掉。
+        if len(transposition_table) >= N:
+            print(f"[DEBUG] Transposition table reached limit {N}, clearing it. (This can be risky)")
+            transposition_table.clear()
 
-        # 限制open_list最大长度
         if len(open_list) > MAX_OPEN_LIST_SIZE:
             open_list = heapq.nsmallest(MAX_OPEN_LIST_SIZE, open_list)
             heapq.heapify(open_list)
 
-        # Check if goal is in open_list (Algorithm 1, line 12-14)
-        for _, _, state in open_list:
-            if is_goal(state):
-                return state
+        # for _, _, state in open_list:
+        #     if is_goal(state):
+        #         return state
 
         if progress_hook is not None:
-            progress_hook(h_val, iterations)
+            progress_hook(f_val, iterations)
 
     return None
 
