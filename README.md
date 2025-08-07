@@ -134,9 +134,6 @@ python batch_test.py
 
 ##  Development Guide
 
-### Adding New Heuristic Functions
-Add new functions in `heuristic_sets.py`, then integrate them in `HSD_3.py`.
-
 ### Modifying Algorithm Parameters
 Adjust the following parameters in `HSD_3.py`:
 - `k`: k-step search depth
