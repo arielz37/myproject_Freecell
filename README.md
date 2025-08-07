@@ -127,7 +127,7 @@ python batch_test.py
 
 ##  Performance Characteristics
 
-- **Solving Speed**: Most games can be solved within 300 seconds
+- **Solving Speed**: Most games can be solved within 50 seconds
 - **Success Rate**: Achieves high success rate on test sets
 - **Memory Usage**: Optimized state representation and caching mechanisms
 - **Scalability**: Supports different parameter configurations and heuristic combinations
