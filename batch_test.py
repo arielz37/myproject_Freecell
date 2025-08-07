@@ -6,7 +6,7 @@ from HSD_3 import State, hsd_solver
 
 # PARAMETER
 ## 测试的deal数量
-TEST_DEAL_NUM = 50
+TEST_DEAL_NUM = 500
 
 # 读取TestDeals_freecell_32k前10个deal
 with open('freecell_32k_deals.txt', 'r') as f:
@@ -58,7 +58,7 @@ for idx, deal_text in enumerate(deals):
 
     try:
         print(f"开始求解Deal {idx+1}")
-        result = hsd_solver(state, k=6, N=100000, timeout=600, progress_hook=progress_hook)
+        result = hsd_solver(state, k=6, N=100000, timeout=300, progress_hook=progress_hook)
         elapsed = time.time() - start
         all_heuristics.append(heuristics)
         all_times.append(elapsed)
