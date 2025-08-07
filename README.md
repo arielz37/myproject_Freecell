@@ -104,10 +104,19 @@ Deal 1:
   Cascade 8: QC 8S 8D 2D 7C 4D
 ```
 
-### Run Batch Testing
-```bash
-python batch_test.py
+### Result Display
 ```
+Solution:
+cascade[5] → freecell[0]
+cascade[2] → freecell[1]
+cascade[2] → freecell[2]
+cascade[2] → foundation[0]
+cascade[0] → freecell[3]
+cascade[0] → foundation[0]
+cascade[5] → foundation[0]
+...
+```
+
 
 ## Algorithm Details
 
